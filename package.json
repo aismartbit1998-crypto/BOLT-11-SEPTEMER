@@ -11,7 +11,7 @@
     "engine"
   ],
   "scripts": {
-    "dev": "concurrently -n engine,user,admin,master -c magenta,cyan,amber,green \"npm run dev --workspace @cortex/engine\" \"npm run dev --workspace @cortex/user\" \"npm run dev --workspace @cortex/admin\" \"npm run dev --workspace @cortex/master\"",
+    "dev": "node scripts/boot.js",
     "dev:engine": "npm run dev --workspace @cortex/engine",
     "dev:user": "npm run dev --workspace @cortex/user",
     "dev:admin": "npm run dev --workspace @cortex/admin",
