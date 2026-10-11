@@ -1,11 +1,13 @@
-export { supabase } from './lib/supabase';
+export { supabase, clearAuthCache } from './lib/supabase';
 export type {
   Profile,
+  AdminRole,
+  UserRole,
+  UserStatus,
   Bot,
   TradeHistory,
   BrokerKey,
   License,
-  AdminRole,
   AdminActivityLog,
   UserFund,
   RiskSettings,
@@ -17,6 +19,7 @@ export type {
 } from './lib/supabase';
 
 export { AuthProvider, useAuth } from './context/AuthContext';
+export type { AppTarget } from './context/AuthContext';
 
 export { default as AuthScreen } from './components/AuthScreen';
 export { default as Sparkline } from './components/Sparkline';

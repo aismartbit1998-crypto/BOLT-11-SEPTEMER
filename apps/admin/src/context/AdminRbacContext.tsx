@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '@cortex/shared/context/AuthContext';
-import type { Profile, UserRole } from '@cortex/shared/lib/supabase';
+import type { UserRole } from '@cortex/shared/lib/supabase';
 
 interface AdminRbac {
   role: UserRole;
@@ -22,14 +22,22 @@ export function AdminRbacProvider({ children }: { children: ReactNode }) {
     setLoading(!profile);
   }, [profile]);
 
-  const role: UserRole = profile?.role ?? 'master_admin';
-  const permissions: string[] = profile?.permissions ?? [];
+  // Fail CLOSED: default to 'client' (no access) when profile is null.
+  // Previously this defaulted to 'master_admin' which was a privilege escalation bug.
+  const role: UserRole = profile?.role ?? 'client';
+  const rawPermissions = profile?.permissions;
+  const permissions: string[] = Array.isArray(rawPermissions)
+    ? rawPermissions
+    : rawPermissions && typeof rawPermissions === 'object'
+      ? Object.keys(rawPermissions).filter(k => (rawPermissions as Record<string, boolean>)[k])
+      : [];
   const isMasterAdmin = role === 'master_admin';
   const isSubAdmin = role === 'sub_admin';
   const licenseQuota = profile?.license_quota ?? 0;
 
   const hasPermission = (perm: string): boolean => {
     if (isMasterAdmin) return true;
+    if (!isSubAdmin) return false;
     return permissions.includes(perm);
   };
 

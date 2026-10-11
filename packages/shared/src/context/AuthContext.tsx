@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase, type Profile, type UserRole } from '../lib/supabase';
+import { supabase, clearAuthCache, type Profile, type UserRole } from '../lib/supabase';
 
-export type AppTarget = 'user' | 'admin';
+export type AppTarget = 'user' | 'admin' | 'master';
 
 interface AuthContextValue {
   session: Session | null;
@@ -10,13 +10,15 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   authError: string | null;
-  profileError: string | null;
   clearAuthError: () => void;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  initializeMaster: (displayName?: string) => Promise<{ error: string | null }>;
   isAdmin: boolean;
+  isMasterAdmin: boolean;
+  isSubAdmin: boolean;
   isClient: boolean;
   appTarget: AppTarget;
 }
@@ -30,42 +32,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const signInInProgress = useRef(false);
 
-  const [profileError, setProfileError] = useState<string | null>(null);
-
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
-    setProfileError(null);
     try {
-      // Primary path: RPC function (SECURITY DEFINER, bypasses RLS)
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('get_profile_by_id', { p_user_id: userId });
 
       if (rpcError) {
-        console.error('RPC get_profile_by_id error:', rpcError.message);
-        // Fallback: direct table query (RLS policy select_own_profile allows auth.uid() = id)
+        // Fallback: direct table query (RLS allows reading own row)
         const { data: rowData, error: rowError } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .maybeSingle();
 
-        if (rowError) {
-          const msg = `RPC: ${rpcError.message} | Table: ${rowError.message}`;
-          console.error('Both profile fetch paths failed:', msg);
-          setProfileError(msg);
-          return null;
-        }
-
-        if (rowData) {
-          const p = rowData as Profile;
-          setProfile(p);
-          return p;
-        }
-        setProfileError('Profile row not found for this user ID');
-        return null;
+        if (rowError) return null;
+        const p = rowData as Profile | null;
+        setProfile(p);
+        return p;
       }
 
-      // The RPC returns json — Supabase JS may deliver it as a parsed object
-      // or as a raw JSON string depending on the PostgREST version. Handle both.
       let parsed: Profile | null = null;
       if (rpcData === null || rpcData === 'null') {
         parsed = null;
@@ -76,28 +61,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!parsed) {
-        // Fallback: direct table query
-        const { data: rowData, error: rowError } = await supabase
+        // Retry with direct query as fallback
+        const { data: rowData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .maybeSingle();
-
-        if (rowError) {
-          setProfileError(`RPC returned null. Table fallback error: ${rowError.message}`);
-          return null;
-        }
-        if (rowData) {
-          parsed = rowData as Profile;
-        }
+        parsed = (rowData as Profile | null) ?? null;
       }
 
       setProfile(parsed);
       return parsed;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('Profile fetch threw (network/timeout):', msg);
-      setProfileError(msg);
+    } catch {
       return null;
     }
   };
@@ -108,57 +83,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const clearAuthError = () => { setAuthError(null); setProfileError(null); };
+  const clearAuthError = () => setAuthError(null);
 
   useEffect(() => {
     let mounted = true;
 
-    const sessionTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.error('Auth session check timed out after 10s — forcing loading to false');
-        setLoading(false);
-      }
+    const timeout = setTimeout(() => {
+      if (mounted && loading) setLoading(false);
     }, 10000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (!mounted) return;
-      clearTimeout(sessionTimeout);
-      if (!session) {
+      clearTimeout(timeout);
+      if (!s || !s.user?.id || !s.access_token) {
+        if (s) supabase.auth.signOut().catch(() => {});
         setSession(null);
         setProfile(null);
         setLoading(false);
         return;
       }
-      // Validate session has the expected shape — corrupted sessions can crash downstream
-      if (!session.user?.id || !session.access_token) {
-        console.error('getSession returned a corrupted/invalid session — signing out');
-        supabase.auth.signOut().catch(() => {});
-        setSession(null);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-      setSession(session);
-      // Retry profile fetch once if first attempt returns null (JWT propagation delay)
-      fetchProfile(session.user.id).then(async (p) => {
+      setSession(s);
+      fetchProfile(s.user.id).then(async (p) => {
         if (!mounted) return;
         if (!p) {
-          console.warn('Profile fetch returned null on first attempt — retrying once');
           await new Promise(r => setTimeout(r, 800));
-          if (!mounted) return;
-          await fetchProfile(session.user.id);
+          if (mounted) await fetchProfile(s.user.id);
         }
         if (mounted) setLoading(false);
-      }).catch((err) => {
-        console.error('Profile fetch threw:', err);
+      }).catch(() => {
         if (mounted) setLoading(false);
       });
-    }).catch((err) => {
-      console.error('getSession threw:', err);
+    }).catch(() => {
       if (mounted) {
-        clearTimeout(sessionTimeout);
-        // Fail-safe: sign out and reset so the login screen renders
-        supabase.auth.signOut().catch(() => {});
+        clearTimeout(timeout);
         setSession(null);
         setProfile(null);
         setLoading(false);
@@ -166,11 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      // If signIn() is handling everything, don't interfere at all —
-      // not even setSession, which would cause a redundant re-render.
-      if (signInInProgress.current) {
-        return;
-      }
+      if (signInInProgress.current) return;
 
       setSession(newSession);
 
@@ -181,23 +134,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(true);
-      let profileResolved = false;
+      let resolved = false;
       const profileTimeout = setTimeout(() => {
-        if (mounted && !profileResolved) {
-          console.error('Profile fetch timed out after 8s during auth state change');
-          profileResolved = true;
+        if (mounted && !resolved) {
+          resolved = true;
           if (mounted) setLoading(false);
         }
       }, 8000);
+
       (async () => {
         try {
           let p = await fetchProfile(newSession.user.id);
-          profileResolved = true;
+          resolved = true;
           clearTimeout(profileTimeout);
           if (!p) {
             await new Promise(r => setTimeout(r, 800));
-            if (!mounted) return;
-            p = await fetchProfile(newSession.user.id);
+            if (mounted) p = await fetchProfile(newSession.user.id);
           }
           if (p && (p.status === 'suspended' || p.status === 'banned')) {
             await supabase.auth.signOut();
@@ -209,10 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 : 'Your account has been banned. Please contact support.'
             );
           }
-        } catch (err) {
-          profileResolved = true;
+        } catch {
+          resolved = true;
           clearTimeout(profileTimeout);
-          console.error('Profile fetch threw during auth state change:', err);
         }
         if (mounted) setLoading(false);
       })();
@@ -224,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Realtime profile watcher — signs out banned/suspended users mid-session
+  // Realtime watcher — signs out banned/suspended users mid-session
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) return;
@@ -258,28 +209,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [session?.user?.id]);
 
+  // ─── signUp: creates auth user. Profile is auto-created by DB trigger. ──
   const signUp = async (email: string, password: string) => {
+    clearAuthCache();
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) return { error: error.message };
 
+    // The on_auth_user_created trigger inserts the profile automatically.
+    // Do NOT manually insert here — that caused duplicate entries.
+    // Sign out so the user can log in deliberately.
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({ id: data.user.id, email: data.user.email });
-      if (profileError) {
-        console.error('Failed to create profile:', profileError.message);
-      }
+      await supabase.auth.signOut();
     }
-
-    await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
-
     return { error: null };
   };
 
+  // ─── signIn: clears cache, authenticates, fetches profile ───────────────
   const signIn = async (email: string, password: string) => {
     setAuthError(null);
+    clearAuthCache();
     setLoading(true);
     signInInProgress.current = true;
     try {
@@ -316,28 +266,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInInProgress.current = false;
       setLoading(false);
       return { error: null };
-    } catch (err) {
-      console.error('Sign in threw:', err);
+    } catch {
       signInInProgress.current = false;
       setLoading(false);
       return { error: 'Network error during sign in. Please try again.' };
     }
   };
 
+  // ─── initializeMaster: registers + promotes to master_admin + logs in ──
+  const initializeMaster = async (displayName?: string) => {
+    setAuthError(null);
+    clearAuthCache();
+    setLoading(true);
+    signInInProgress.current = true;
+    try {
+      // Step 1: Sign up the auth user
+      // The caller provides email+password via a separate signUp call first,
+      // then this function is called when authenticated.
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('initialize_master_admin', {
+          p_display_name: displayName ?? null,
+        });
+
+      if (rpcError) {
+        signInInProgress.current = false;
+        setLoading(false);
+        return { error: rpcError.message };
+      }
+
+      // Refresh profile from the RPC result
+      let result = rpcData;
+      if (typeof result === 'string') {
+        try { result = JSON.parse(result); } catch { /* keep as string */ }
+      }
+
+      if (result && typeof result === 'object' && result.profile) {
+        setProfile(result.profile as Profile);
+      } else {
+        // Fallback: refetch profile
+        if (session?.user?.id) {
+          await fetchProfile(session.user.id);
+        }
+      }
+
+      signInInProgress.current = false;
+      setLoading(false);
+      return { error: null };
+    } catch (err) {
+      signInInProgress.current = false;
+      setLoading(false);
+      const msg = err instanceof Error ? err.message : 'Initialization failed';
+      return { error: msg };
+    }
+  };
+
   const signOut = async () => {
-    try { await supabase.auth.signOut(); } catch (err) { console.error('Sign out error:', err); }
+    clearAuthCache();
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
     setProfile(null);
     setSession(null);
   };
 
   const role: UserRole = profile?.role ?? 'client';
-  const isAdmin = profile !== null && (role === 'master_admin' || role === 'sub_admin');
+  const isMasterAdmin = profile !== null && role === 'master_admin';
+  const isSubAdmin = profile !== null && role === 'sub_admin';
+  const isAdmin = isMasterAdmin || isSubAdmin;
   const isClient = profile !== null && role === 'client';
-  const appTarget: AppTarget = isAdmin ? 'admin' : 'user';
+  const appTarget: AppTarget = isMasterAdmin ? 'master' : isAdmin ? 'admin' : 'user';
 
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, profile, loading, authError, profileError, clearAuthError, signUp, signIn, signOut, refreshProfile, isAdmin, isClient, appTarget }}
+      value={{
+        session, user: session?.user ?? null, profile, loading, authError,
+        clearAuthError, signUp, signIn, signOut, refreshProfile, initializeMaster,
+        isAdmin, isMasterAdmin, isSubAdmin, isClient, appTarget,
+      }}
     >
       {children}
     </AuthContext.Provider>

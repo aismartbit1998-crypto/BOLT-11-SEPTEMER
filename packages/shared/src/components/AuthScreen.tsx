@@ -49,25 +49,22 @@ export default function AuthScreen() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background glow orbs */}
       <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-neon-cyan/10 rounded-full blur-3xl animate-pulse-slow" />
       <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-neon-green/10 rounded-full blur-3xl animate-pulse-slow" />
 
       <div className="relative w-full max-w-md animate-scale-in">
-        {/* Brand */}
         <div className="flex flex-col items-center mb-8">
           <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-neon-cyan/20 to-neon-green/20 border border-neon-cyan/30 flex items-center justify-center neon-glow-cyan mb-4">
             <BrainCircuit className="w-9 h-9 text-neon-cyan" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
-            <span className="text-neon-cyan neon-text-cyan">Cortex</span>{' '}
-            <span className="text-neon-green neon-text-green">AI</span>
+            <span className="text-neon-cyan neon-text-cyan">One</span>{' '}
+            <span className="text-neon-green neon-text-green">Palace</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">Next-Gen Crypto Trading Intelligence</p>
+          <p className="text-xs text-slate-500 mt-1">Next-Gen Quant Trading Intelligence</p>
         </div>
 
         <div className="glass-strong neon-glow-cyan p-6 sm:p-8">
-          {/* Tab switcher */}
           <div className="flex gap-2 p-1 rounded-xl bg-base-800/50 mb-6">
             <button
               onClick={() => switchMode('signin')}
@@ -97,7 +94,6 @@ export default function AuthScreen() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
             <div>
               <label className="text-xs text-slate-400 mb-1.5 block font-semibold">Email</label>
               <div className="relative">
@@ -113,7 +109,6 @@ export default function AuthScreen() {
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="text-xs text-slate-400 mb-1.5 block font-semibold">Password</label>
               <div className="relative">
@@ -130,7 +125,6 @@ export default function AuthScreen() {
               </div>
             </div>
 
-            {/* Error */}
             {displayError && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-neon-red/10 border border-neon-red/20 text-xs text-neon-red animate-slide-up">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -138,7 +132,6 @@ export default function AuthScreen() {
               </div>
             )}
 
-            {/* Success */}
             {success && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-neon-green/10 border border-neon-green/20 text-xs text-neon-green animate-slide-up">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -146,7 +139,6 @@ export default function AuthScreen() {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -172,7 +164,6 @@ export default function AuthScreen() {
             </button>
           </form>
 
-          {/* Footer note */}
           <p className="mt-5 text-center text-[11px] text-slate-500">
             {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
             <button
@@ -185,7 +176,7 @@ export default function AuthScreen() {
         </div>
 
         <p className="mt-4 text-center text-[10px] text-slate-600">
-          By continuing, you agree to Cortex AI's Terms of Use and Privacy Policy.
+          By continuing, you agree to OnePalace's Terms of Use and Privacy Policy.
         </p>
       </div>
     </div>

@@ -51,7 +51,7 @@ interface ImpersonationState {
 }
 
 function AppContent() {
-  const { session, profile, loading, refreshProfile, isAdmin } = useAuth();
+  const { session, profile, loading, refreshProfile, isAdmin, isMasterAdmin } = useAuth();
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [panicOpen, setPanicOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -59,7 +59,7 @@ function AppContent() {
   const [redirecting, setRedirecting] = useState(false);
   const [disclaimerDismissed, setDisclaimerDismissed] = useState(false);
   const [pendingTradeCoin, setPendingTradeCoin] = useState<string | null>(null);
-  const [appName, setAppName] = useState('Cortex AI');
+  const [appName, setAppName] = useState('OnePalace');
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const handlePanicConfirm = async () => {
@@ -101,14 +101,16 @@ function AppContent() {
     }
   }, []);
 
-  // Route guard: redirect admin users to the admin panel — only when profile is confirmed
+  // Route guard: redirect admin users to their correct panel
+  // master_admin -> 5175, sub_admin -> 5174
   useEffect(() => {
     if (!loading && session && profile && isAdmin && !impersonation) {
       setRedirecting(true);
-      const adminUrl = window.location.origin.replace(':5173', ':5174');
-      window.location.href = adminUrl;
+      const targetPort = isMasterAdmin ? '5175' : '5174';
+      const targetUrl = window.location.origin.replace(':5173', targetPort);
+      window.location.href = targetUrl;
     }
-  }, [loading, session, profile, isAdmin, impersonation]);
+  }, [loading, session, profile, isAdmin, isMasterAdmin, impersonation]);
 
   // Load system settings (branding + maintenance mode)
   useEffect(() => {
@@ -119,7 +121,7 @@ function AppContent() {
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
-          setAppName(data.app_name || 'Cortex AI');
+          setAppName(data.app_name || 'OnePalace');
           setMaintenanceMode(data.maintenance_mode || false);
         }
       });
@@ -153,7 +155,7 @@ function AppContent() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 text-neon-cyan animate-spin" />
-          <p className="text-sm text-slate-400">{redirecting ? 'Redirecting to Admin Panel...' : `Loading ${appName}...`}</p>
+          <p className="text-sm text-slate-400">{redirecting ? 'Redirecting...' : `Loading ${appName}...`}</p>
         </div>
       </div>
     );

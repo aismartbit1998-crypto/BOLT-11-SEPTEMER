@@ -1,5 +1,5 @@
 {
-  "name": "cortex-ai",
+  "name": "onepalace",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,18 +7,21 @@
     "packages/shared",
     "apps/user",
     "apps/admin",
+    "apps/master",
     "engine"
   ],
   "scripts": {
-    "dev": "concurrently -n engine,user,admin -c magenta,cyan,amber \"npm run dev --workspace @cortex/engine\" \"npm run dev --workspace @cortex/user\" \"npm run dev --workspace @cortex/admin\"",
+    "dev": "concurrently -n engine,user,admin,master -c magenta,cyan,amber,green \"npm run dev --workspace @cortex/engine\" \"npm run dev --workspace @cortex/user\" \"npm run dev --workspace @cortex/admin\" \"npm run dev --workspace @cortex/master\"",
     "dev:engine": "npm run dev --workspace @cortex/engine",
     "dev:user": "npm run dev --workspace @cortex/user",
     "dev:admin": "npm run dev --workspace @cortex/admin",
-    "build": "npm run build --workspace @cortex/user && npm run build --workspace @cortex/admin",
+    "dev:master": "npm run dev --workspace @cortex/master",
+    "build": "npm run build --workspace @cortex/user && npm run build --workspace @cortex/admin && npm run build --workspace @cortex/master",
     "build:user": "npm run build --workspace @cortex/user",
     "build:admin": "npm run build --workspace @cortex/admin",
+    "build:master": "npm run build --workspace @cortex/master",
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspace @cortex/user && npm run typecheck --workspace @cortex/admin"
+    "typecheck": "npm run typecheck --workspace @cortex/user && npm run typecheck --workspace @cortex/admin && npm run typecheck --workspace @cortex/master"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

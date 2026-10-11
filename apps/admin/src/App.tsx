@@ -32,18 +32,13 @@ const viewTitles: Record<AdminViewId, string> = {
 };
 
 function AdminApp() {
-  const { session, loading, profile, isClient, signOut, refreshProfile, profileError } = useAuth();
+  const { session, loading, profile, isClient, isMasterAdmin, signOut, refreshProfile, profileError } = useAuth();
   const [activeView, setActiveView] = useState<AdminViewId>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [riskSettings, setRiskSettings] = useState<RiskSettings | null>(null);
   const [riskLoading, setRiskLoading] = useState(true);
   const [riskError, setRiskError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
-
-  // Clean up any stale God Mode localStorage from the previous bypass
-  useEffect(() => {
-    localStorage.removeItem('MASTER_BYPASS');
-  }, []);
 
   useEffect(() => {
     if (!session) {
@@ -89,14 +84,21 @@ function AdminApp() {
     };
   }, [session]);
 
-  // Route guard: redirect client users back to the user panel — only when profile is confirmed
+  // Route guard: redirect client users to user panel (5173),
+  // and master_admin users to master panel (5175).
   useEffect(() => {
-    if (!loading && session && profile && isClient) {
-      setRedirecting(true);
-      const userUrl = window.location.origin.replace(':5174', ':5173');
-      window.location.href = userUrl;
+    if (!loading && session && profile) {
+      if (isClient) {
+        setRedirecting(true);
+        const userUrl = window.location.origin.replace(':5174', ':5173');
+        window.location.href = userUrl;
+      } else if (isMasterAdmin) {
+        setRedirecting(true);
+        const masterUrl = window.location.origin.replace(':5174', ':5175');
+        window.location.href = masterUrl;
+      }
     }
-  }, [loading, session, profile, isClient]);
+  }, [loading, session, profile, isClient, isMasterAdmin]);
 
   const toggleKillSwitch = async () => {
     if (!riskSettings) return;
@@ -129,7 +131,7 @@ function AdminApp() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 text-neon-amber animate-spin" />
-          <p className="text-sm text-slate-400">{redirecting ? 'Redirecting to User Panel...' : 'Loading Admin Panel...'}</p>
+          <p className="text-sm text-slate-400">{redirecting ? 'Redirecting...' : 'Loading Admin Panel...'}</p>
         </div>
       </div>
     );
@@ -139,13 +141,13 @@ function AdminApp() {
     return <AuthScreen />;
   }
 
-  // Client users get redirected to the user panel
-  if (profile && isClient) {
+  // Client or master_admin users get redirected
+  if (profile && (isClient || isMasterAdmin)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 text-neon-amber animate-spin" />
-          <p className="text-sm text-slate-400">Redirecting to User Panel...</p>
+          <p className="text-sm text-slate-400">Redirecting...</p>
         </div>
       </div>
     );
@@ -241,7 +243,7 @@ function AdminApp() {
 
               <div className="p-4 sm:p-6 max-w-7xl mx-auto">
                 <div className="hidden lg:flex items-center gap-2 mb-5 text-xs">
-                  <span className="text-neon-amber/70">Cortex Admin</span>
+                  <span className="text-neon-amber/70">OnePalace Admin</span>
                   <span className="text-slate-700">/</span>
                   <span className="text-neon-amber font-semibold">{viewTitles[activeView]}</span>
                 </div>
